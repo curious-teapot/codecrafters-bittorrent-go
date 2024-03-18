@@ -63,7 +63,7 @@ func decodeList(str string) ([]interface{}, int, error) {
 		list = append(list, val)
 	}
 
-	return list, 0, nil
+	return list, cursor, nil
 }
 
 // Example:
