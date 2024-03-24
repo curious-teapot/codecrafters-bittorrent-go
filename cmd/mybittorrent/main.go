@@ -106,6 +106,40 @@ func decodeList(reader *bufio.Reader) ([]interface{}, error) {
 	return list, nil
 }
 
+func decodeDictionary(reader *bufio.Reader) (map[string]interface{}, error) {
+	_, err := reader.Discard(1)
+	if err != nil {
+		return nil, err
+	}
+
+	m := make(map[string]interface{})
+
+	for {
+		nextByte, err := reader.Peek(1)
+		if err != nil {
+			return nil, err
+		}
+
+		if nextByte[0] == 'e' {
+			break
+		}
+
+		key, err := decodeString(reader)
+		if err != nil {
+			return nil, err
+		}
+
+		val, err := decodeBencode(reader)
+		if err != nil {
+			return nil, err
+		}
+
+		m[key] = val
+	}
+
+	return m, nil
+}
+
 func decodeBencode(reader *bufio.Reader) (interface{}, error) {
 	for {
 		b, err := reader.Peek(1)
@@ -124,6 +158,9 @@ func decodeBencode(reader *bufio.Reader) (interface{}, error) {
 
 		case c == 'l':
 			return decodeList(reader)
+
+		case c == 'd':
+			return decodeDictionary(reader)
 
 		default:
 			return "", fmt.Errorf("only strings are supported at the moment")
