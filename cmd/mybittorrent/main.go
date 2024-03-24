@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,81 +11,128 @@ import (
 	// bencode "github.com/jackpal/bencode-go" // Available if you need it!
 )
 
-func decodeString(str string) (string, int, error) {
-	firstColonIndex := strings.IndexByte(str, ':')
-
-	if firstColonIndex == -1 {
-		return "", 0, errors.New("invalid string format - missing ':'")
-	}
-
-	lengthStr := str[:firstColonIndex]
-
-	length, err := strconv.Atoi(lengthStr)
+func readUntilByte(reader *bufio.Reader, untilByte byte) (string, error) {
+	buff, err := reader.ReadBytes(untilByte)
 	if err != nil {
-		return "", 0, err
+		return "", err
 	}
 
-	strEnd := firstColonIndex + 1 + length
-
-	return str[firstColonIndex+1 : strEnd], strEnd - 1, nil
+	return string(buff[:len(buff)-1]), nil
 }
 
-func decodeInt(str string) (int, int, error) {
-	firstEndIndex := strings.IndexByte(str, 'e')
-
-	if firstEndIndex == -1 {
-		return 0, 0, errors.New("invalid int format - missing 'e'")
-	}
-
-	val, err := strconv.Atoi(str[1:firstEndIndex])
+func readByteSlice(reader *bufio.Reader, n int) ([]byte, error) {
+	bytes, err := reader.Peek(n)
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
 
-	return val, firstEndIndex, nil
+	_, err = reader.Discard(n)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes, nil
 }
 
-func decodeList(str string) ([]interface{}, int, error) {
+func decodeString(reader *bufio.Reader) (string, error) {
+
+	sizeStr, err := readUntilByte(reader, ':')
+	if err != nil {
+		return "", err
+	}
+
+	length, err := strconv.Atoi(sizeStr)
+	if err != nil {
+		return "", err
+	}
+
+	bytes, err := readByteSlice(reader, length)
+	if err != nil {
+		return "", err
+	}
+
+	return string(bytes), nil
+}
+
+func decodeInt(reader *bufio.Reader) (int, error) {
+	_, err := reader.Discard(1)
+	if err != nil {
+		return 0, err
+	}
+
+	intStr, err := readUntilByte(reader, 'e')
+	if err != nil {
+		return 0, err
+	}
+
+	val, err := strconv.Atoi(string(intStr))
+	if err != nil {
+		return 0, err
+	}
+
+	return val, nil
+}
+
+func decodeList(reader *bufio.Reader) ([]interface{}, error) {
+	_, err := reader.Discard(1)
+	if err != nil {
+		return nil, err
+	}
+
 	list := make([]interface{}, 0)
-
-	listContent := str[1 : len(str)-1]
-
-	cursor := 0
-
-	for cursor < len(listContent)-1 {
-		val, end, err := decodeBencode(listContent[cursor:])
-
+	for {
+		val, err := decodeBencode(reader)
 		if err != nil {
-			return list, 0, err
+			return nil, err
 		}
 
-		cursor += end + 1
 		list = append(list, val)
+
+		nextByte, err := reader.Peek(1)
+		if err != nil {
+			return nil, err
+		}
+
+		if nextByte[0] == 'e' {
+			break
+		}
 	}
 
-	return list, cursor, nil
+	_, err = reader.Discard(1)
+	if err != nil {
+		return nil, err
+	}
+
+	return list, nil
 }
 
-// Example:
-// - 5:hello -> hello
-// - 10:hello12345 -> hello12345
-func decodeBencode(bencodedString string) (interface{}, int, error) {
-	firstChar := rune(bencodedString[0])
+func decodeBencode(reader *bufio.Reader) (interface{}, error) {
+	for {
+		b, err := reader.Peek(1)
+		if err != nil {
+			break
+		}
 
-	switch {
-	case unicode.IsDigit(firstChar):
-		return decodeString(bencodedString)
+		c := rune(b[0])
 
-	case firstChar == 'i':
-		return decodeInt(bencodedString)
+		switch {
+		case unicode.IsDigit(c):
+			return decodeString(reader)
 
-	case firstChar == 'l':
-		return decodeList(bencodedString)
+		case c == 'i':
+			return decodeInt(reader)
 
-	default:
-		return "", 0, fmt.Errorf("only strings are supported at the moment")
+		case c == 'l':
+			return decodeList(reader)
+
+		default:
+			return "", fmt.Errorf("only strings are supported at the moment")
+
+		}
 
 	}
+
+	return "", fmt.Errorf("only strings are supported at the moment")
 }
 
 func main() {
@@ -94,7 +141,7 @@ func main() {
 	if command == "decode" {
 		bencodedValue := os.Args[2]
 
-		decoded, _, err := decodeBencode(bencodedValue)
+		decoded, err := decodeBencode(bufio.NewReader(strings.NewReader(bencodedValue)))
 		if err != nil {
 			fmt.Println(err)
 			return
