@@ -81,13 +81,6 @@ func decodeList(reader *bufio.Reader) ([]interface{}, error) {
 
 	list := make([]interface{}, 0)
 	for {
-		val, err := decodeBencode(reader)
-		if err != nil {
-			return nil, err
-		}
-
-		list = append(list, val)
-
 		nextByte, err := reader.Peek(1)
 		if err != nil {
 			return nil, err
@@ -96,6 +89,13 @@ func decodeList(reader *bufio.Reader) ([]interface{}, error) {
 		if nextByte[0] == 'e' {
 			break
 		}
+
+		val, err := decodeBencode(reader)
+		if err != nil {
+			return nil, err
+		}
+
+		list = append(list, val)
 	}
 
 	_, err = reader.Discard(1)
