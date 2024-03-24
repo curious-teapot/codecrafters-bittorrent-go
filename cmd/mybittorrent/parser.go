@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 )
@@ -28,11 +30,11 @@ type TorrentMetaInfo struct {
 	InfoHash  string
 }
 
-// func calculateInfoHash(d []byte) string {
-// 	sum := sha1.Sum(d)
+func calculateInfoHash(d []byte) string {
+	sum := sha1.Sum(d)
 
-// 	return hex.EncodeToString(sum[:])
-// }
+	return hex.EncodeToString(sum[:])
+}
 
 func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
 	fileData, err := os.ReadFile(path)
@@ -41,12 +43,12 @@ func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
 	}
 
 	reader := bufio.NewReader(bytes.NewReader(fileData))
-	dataAsMap, err := decodeBencode(reader)
+	decodedData, err := decodeBencode(reader)
 	if err != nil {
 		return nil, err
 	}
 
-	mapAsJson, err := json.Marshal(dataAsMap)
+	mapAsJson, err := json.Marshal(decodedData)
 	if err != nil {
 		return nil, err
 	}
@@ -57,12 +59,14 @@ func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
 		return nil, err
 	}
 
-	// encodedInfo, err := bencode.EncodeBytes(dataAsMap["info"])
-	// if err != nil {
-	// 	return nil, err
-	// }
+	dataAsMap := decodedData.(map[string]interface{})
 
-	// torrentFile.InfoHash = calculateInfoHash(encodedInfo)
+	encodedInfo, err := encodeBencode(dataAsMap["info"])
+	if err != nil {
+		return nil, err
+	}
+
+	torrentFile.InfoHash = calculateInfoHash([]byte(encodedInfo))
 
 	if len(torrentFile.Info.Files) == 0 {
 		file := TorrentFileInfoFile{Path: torrentFile.Info.Name, Length: torrentFile.Info.Length}

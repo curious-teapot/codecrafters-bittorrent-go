@@ -69,7 +69,7 @@ func decodeInt(reader *bufio.Reader) (int, error) {
 	return val, nil
 }
 
-func decodeList(reader *bufio.Reader) ([]interface{}, error) {
+func decodeList(reader *bufio.Reader) ([]any, error) {
 	_, err := reader.Discard(1)
 	if err != nil {
 		return nil, err
@@ -166,4 +166,49 @@ func decodeBencode(reader *bufio.Reader) (interface{}, error) {
 	}
 
 	return "", fmt.Errorf("only strings are supported at the moment")
+}
+
+func encodeBencode(val interface{}) (string, error) {
+	switch val := val.(type) {
+	case int:
+		return fmt.Sprintf("i%de", val), nil
+
+	case string:
+		return fmt.Sprintf("%d:%s", len(val), val), nil
+
+	case []any:
+		strBuff := ""
+		for _, sliceItem := range val {
+			encodedItem, err := encodeBencode(sliceItem)
+			if err != nil {
+				return "", err
+			}
+			strBuff += encodedItem
+		}
+
+		return fmt.Sprintf("l%se", strBuff), nil
+
+	case map[string]any:
+		strBuff := ""
+		for mapItemKey, mapItem := range val {
+			encodedKey, err := encodeBencode(mapItemKey)
+			if err != nil {
+				return "", err
+			}
+			strBuff += encodedKey
+
+			encodeItem, err := encodeBencode(mapItem)
+			if err != nil {
+				return "", err
+			}
+			strBuff += encodeItem
+		}
+
+		return fmt.Sprintf("l%se", strBuff), nil
+
+	default:
+		fmt.Printf("%+v type: %T", val, val)
+
+		return "", fmt.Errorf("unsupported value for encode")
+	}
 }
