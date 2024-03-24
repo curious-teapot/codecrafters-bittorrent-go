@@ -6,7 +6,10 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
+	"strings"
 )
 
 type TorrentFileInfoFile struct {
@@ -19,6 +22,7 @@ type TorrentFileInfo struct {
 	Length      int                   `json:"length"`
 	Name        string                `json:"name"`
 	PieceLength int                   `json:"piece length"`
+	Pieces      []string              `json:"omitempty"`
 }
 
 type TorrentMetaInfo struct {
@@ -34,6 +38,25 @@ func calculateInfoHash(d []byte) string {
 	sum := sha1.Sum(d)
 
 	return hex.EncodeToString(sum[:])
+}
+
+func decodePiecesHash(str string) []string {
+	hashes := make([]string, 0)
+
+	reader := strings.NewReader(str)
+	buff := make([]byte, 20)
+
+	for {
+		fmt.Print(1)
+		_, err := reader.Read(buff)
+		if err == io.EOF {
+			break
+		}
+
+		hashes = append(hashes, hex.EncodeToString(buff))
+	}
+
+	return hashes
 }
 
 func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
@@ -66,7 +89,10 @@ func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
 		return nil, err
 	}
 
+	info := dataAsMap["info"].(map[string]interface{})
+
 	torrentFile.InfoHash = calculateInfoHash([]byte(encodedInfo))
+	torrentFile.Info.Pieces = decodePiecesHash(info["pieces"].(string))
 
 	if len(torrentFile.Info.Files) == 0 {
 		file := TorrentFileInfoFile{Path: torrentFile.Info.Name, Length: torrentFile.Info.Length}
