@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"sort"
 	"strconv"
 	"unicode"
 )
@@ -189,22 +190,29 @@ func encodeBencode(val interface{}) (string, error) {
 		return fmt.Sprintf("l%se", strBuff), nil
 
 	case map[string]any:
+		mapKeys := make([]string, 0, len(val))
+		for k := range val {
+			mapKeys = append(mapKeys, k)
+		}
+
+		sort.Strings(mapKeys)
+
 		strBuff := ""
-		for mapItemKey, mapItem := range val {
+		for _, mapItemKey := range mapKeys {
 			encodedKey, err := encodeBencode(mapItemKey)
 			if err != nil {
 				return "", err
 			}
 			strBuff += encodedKey
 
-			encodeItem, err := encodeBencode(mapItem)
+			encodeItem, err := encodeBencode(val[mapItemKey])
 			if err != nil {
 				return "", err
 			}
 			strBuff += encodeItem
 		}
 
-		return fmt.Sprintf("l%se", strBuff), nil
+		return fmt.Sprintf("d%se", strBuff), nil
 
 	default:
 		fmt.Printf("%+v type: %T", val, val)
