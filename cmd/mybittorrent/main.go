@@ -35,7 +35,7 @@ func main() {
 
 		fmt.Printf("Tracker URL: %s\n", metaInfo.Announce)
 		fmt.Printf("Length: %d\n", metaInfo.Info.Length)
-		fmt.Printf("Info Hash: %s", metaInfo.InfoHash)
+		fmt.Printf("Info Hash: %s\n", metaInfo.InfoHash)
 
 	default:
 		fmt.Println("Unknown command: " + command)
