@@ -55,9 +55,10 @@ func decodePiecesHash(str string) []Hash {
 	hashes := make([]Hash, 0)
 
 	reader := strings.NewReader(str)
-	buff := make([]byte, 20)
 
 	for {
+		buff := make([]byte, 20)
+
 		_, err := reader.Read(buff)
 		if err == io.EOF {
 			break
