@@ -6,7 +6,6 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -22,7 +21,7 @@ type TorrentFileInfo struct {
 	Length      int                   `json:"length"`
 	Name        string                `json:"name"`
 	PieceLength int                   `json:"piece length"`
-	Pieces      []string              `json:"omitempty"`
+	Pieces      []Hash                `json:"omitempty"`
 }
 
 type TorrentMetaInfo struct {
@@ -31,32 +30,57 @@ type TorrentMetaInfo struct {
 	Comment   string          `json:"comment"`
 	CreatedBy string          `json:"created by"`
 	Encoding  string          `json:"encoding"`
-	InfoHash  string
+	InfoHash  Hash
 }
 
-func calculateInfoHash(d []byte) string {
+type Hash struct {
+	Hash []byte
+}
+
+func (h *Hash) Hex() string {
+	return hex.EncodeToString(h.Hash)
+}
+
+func (h *Hash) String() string {
+	return string(h.Hash)
+}
+
+func calculateInfoHash(d []byte) Hash {
 	sum := sha1.Sum(d)
 
-	return hex.EncodeToString(sum[:])
+	return Hash{sum[:]}
 }
 
-func decodePiecesHash(str string) []string {
-	hashes := make([]string, 0)
+func decodePiecesHash(str string) []Hash {
+	hashes := make([]Hash, 0)
 
 	reader := strings.NewReader(str)
 	buff := make([]byte, 20)
 
 	for {
-		fmt.Print(1)
 		_, err := reader.Read(buff)
 		if err == io.EOF {
 			break
 		}
 
-		hashes = append(hashes, hex.EncodeToString(buff))
+		hashes = append(hashes, Hash{buff})
 	}
 
 	return hashes
+}
+
+func unmarshalToStruct(obj any, targetStruct any) error {
+	mapAsJson, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(mapAsJson, targetStruct)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
@@ -71,25 +95,20 @@ func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
 		return nil, err
 	}
 
-	mapAsJson, err := json.Marshal(decodedData)
-	if err != nil {
-		return nil, err
-	}
-
 	torrentFile := TorrentMetaInfo{}
-	err = json.Unmarshal(mapAsJson, &torrentFile)
+	err = unmarshalToStruct(decodedData, &torrentFile)
 	if err != nil {
 		return nil, err
 	}
 
-	dataAsMap := decodedData.(map[string]interface{})
+	dataAsMap := decodedData.(map[string]any)
 
 	encodedInfo, err := encodeBencode(dataAsMap["info"])
 	if err != nil {
 		return nil, err
 	}
 
-	info := dataAsMap["info"].(map[string]interface{})
+	info := dataAsMap["info"].(map[string]any)
 
 	torrentFile.InfoHash = calculateInfoHash([]byte(encodedInfo))
 	torrentFile.Info.Pieces = decodePiecesHash(info["pieces"].(string))

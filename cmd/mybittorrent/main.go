@@ -35,11 +35,30 @@ func main() {
 
 		fmt.Printf("Tracker URL: %s\n", metaInfo.Announce)
 		fmt.Printf("Length: %d\n", metaInfo.Info.Length)
-		fmt.Printf("Info Hash: %s\n", metaInfo.InfoHash)
+		fmt.Printf("Info Hash: %s\n", metaInfo.InfoHash.Hex())
 		fmt.Printf("Piece Length: %d\n", metaInfo.Info.PieceLength)
 		fmt.Println("Piece Hashes:")
 		for _, pieceHash := range metaInfo.Info.Pieces {
-			fmt.Println(pieceHash)
+			fmt.Println(pieceHash.Hex())
+		}
+
+	case "peers":
+		filePath := os.Args[2]
+
+		metaInfo, err := decodeMetaInfoFile(filePath)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		peers, err := getPeers(metaInfo)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		for _, peer := range peers.Peers {
+			fmt.Printf("%s:%d\n", peer.Ip, peer.Port)
 		}
 
 	default:

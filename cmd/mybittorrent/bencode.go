@@ -76,7 +76,7 @@ func decodeList(reader *bufio.Reader) ([]any, error) {
 		return nil, err
 	}
 
-	list := make([]interface{}, 0)
+	list := make([]any, 0)
 	for {
 		nextByte, err := reader.Peek(1)
 		if err != nil {
@@ -103,13 +103,13 @@ func decodeList(reader *bufio.Reader) ([]any, error) {
 	return list, nil
 }
 
-func decodeDictionary(reader *bufio.Reader) (map[string]interface{}, error) {
+func decodeDictionary(reader *bufio.Reader) (map[string]any, error) {
 	_, err := reader.Discard(1)
 	if err != nil {
 		return nil, err
 	}
 
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 
 	for {
 		nextByte, err := reader.Peek(1)
@@ -137,7 +137,7 @@ func decodeDictionary(reader *bufio.Reader) (map[string]interface{}, error) {
 	return m, nil
 }
 
-func decodeBencode(reader *bufio.Reader) (interface{}, error) {
+func decodeBencode(reader *bufio.Reader) (any, error) {
 	for {
 		b, err := reader.Peek(1)
 		if err != nil {
@@ -160,7 +160,7 @@ func decodeBencode(reader *bufio.Reader) (interface{}, error) {
 			return decodeDictionary(reader)
 
 		default:
-			return "", fmt.Errorf("only strings are supported at the moment")
+			return "", fmt.Errorf("only strings are supported at the moment - %v", c)
 
 		}
 
@@ -169,7 +169,7 @@ func decodeBencode(reader *bufio.Reader) (interface{}, error) {
 	return "", fmt.Errorf("only strings are supported at the moment")
 }
 
-func encodeBencode(val interface{}) (string, error) {
+func encodeBencode(val any) (string, error) {
 	switch val := val.(type) {
 	case int:
 		return fmt.Sprintf("i%de", val), nil
