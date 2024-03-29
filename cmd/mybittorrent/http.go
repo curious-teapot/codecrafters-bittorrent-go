@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -34,6 +35,27 @@ func (a *Addr) ReadFromBytes(b []byte) error {
 	a.Port = binary.BigEndian.Uint16(portBuff)
 
 	return nil
+}
+
+func (a *Addr) ReadFromString(str string) error {
+	ip, port, ok := strings.Cut(str, ":")
+	if !ok {
+		return fmt.Errorf("unexpected address format")
+	}
+
+	portStr, err := strconv.Atoi(port)
+	if err != nil {
+		return err
+	}
+
+	a.Ip = net.ParseIP(ip)
+	a.Port = uint16(portStr)
+
+	return nil
+}
+
+func (a *Addr) ToString() string {
+	return fmt.Sprintf("%s:%d", a.Ip, a.Port)
 }
 
 type GetPeersResponse struct {
@@ -117,4 +139,69 @@ func createGetPeersRequest(metafile *TorrentMetaInfo) (*http.Request, error) {
 	req.URL.RawQuery = query.Encode()
 
 	return req, nil
+}
+
+func makePeerHandshake(metafile TorrentMetaInfo, addr Addr) (Handshake, error) {
+	conn, err := net.Dial("tcp", addr.ToString())
+	if err != nil {
+		return Handshake{}, err
+	}
+
+	defer conn.Close()
+
+	handshakeReq := Handshake{
+		InfoHash: metafile.InfoHash,
+		PeerId:   "00112233445566778899",
+	}
+
+	_, err = conn.Write(handshakeReq.toBytes())
+	if err != nil {
+		return Handshake{}, err
+	}
+
+	resp := make([]byte, 68)
+	n, err := conn.Read(resp)
+	if err != nil {
+		return Handshake{}, err
+	}
+
+	if n != 68 {
+		return Handshake{}, fmt.Errorf("unxepected handshake response length %d", n)
+	}
+
+	respHandshake, err := NewHandshakeFromBytes(resp)
+	if err != nil {
+		return Handshake{}, err
+	}
+
+	return respHandshake, nil
+}
+
+type Handshake struct {
+	InfoHash Hash
+	PeerId   string
+}
+
+func (h *Handshake) toBytes() []byte {
+	buf := make([]byte, 1)
+	buf[0] = 19 // length of the protocol
+	buf = append(buf, []byte("BitTorrent protocol")...)
+	buf = append(buf, make([]byte, 8)...) // eight reserved bytes
+	buf = append(buf, h.InfoHash.Hash...)
+	buf = append(buf, []byte(h.PeerId)...) // peer id
+
+	return buf
+}
+
+func NewHandshakeFromBytes(bytes []byte) (Handshake, error) {
+	h := Handshake{}
+
+	if len(bytes) != 68 {
+		return h, fmt.Errorf("unxepected handhake length %d", len(bytes))
+	}
+
+	h.InfoHash = Hash{Hash: bytes[28:48]}
+	h.PeerId = hex.EncodeToString(bytes[48:])
+
+	return h, nil
 }

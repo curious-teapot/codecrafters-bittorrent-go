@@ -61,6 +61,35 @@ func main() {
 			fmt.Printf("%s:%d\n", peer.Ip, peer.Port)
 		}
 
+	case "handshake":
+		if len(os.Args) < 4 {
+			fmt.Println("Please provide file and peer id")
+			return
+		}
+
+		filePath := os.Args[2]
+		peerAddr := os.Args[3]
+
+		metaInfo, err := decodeMetaInfoFile(filePath)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		addr := Addr{}
+		err = addr.ReadFromString(peerAddr)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		handshake, err := makePeerHandshake(*metaInfo, addr)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		fmt.Printf("Peer ID: %s\n", handshake.PeerId)
+
 	default:
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
