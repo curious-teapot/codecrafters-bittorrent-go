@@ -98,7 +98,7 @@ func decodeGetPeersRespone(r *io.ReadCloser) (GetPeersResponse, error) {
 	return resp, err
 }
 
-func getPeers(metafile *TorrentMetaInfo) (GetPeersResponse, error) {
+func getPeers(metafile TorrentMetaInfo) (GetPeersResponse, error) {
 
 	client := http.Client{}
 	req, err := createGetPeersRequest(metafile)
@@ -122,7 +122,7 @@ func getPeers(metafile *TorrentMetaInfo) (GetPeersResponse, error) {
 	return responseStruct, err
 }
 
-func createGetPeersRequest(metafile *TorrentMetaInfo) (*http.Request, error) {
+func createGetPeersRequest(metafile TorrentMetaInfo) (*http.Request, error) {
 	req, err := http.NewRequest("GET", metafile.Announce, nil)
 	if err != nil {
 		return nil, err
@@ -141,13 +141,11 @@ func createGetPeersRequest(metafile *TorrentMetaInfo) (*http.Request, error) {
 	return req, nil
 }
 
-func makePeerHandshake(metafile TorrentMetaInfo, addr Addr) (Handshake, error) {
+func makePeerHandshake(metafile TorrentMetaInfo, addr Addr) (Handshake, net.Conn, error) {
 	conn, err := net.Dial("tcp", addr.ToString())
 	if err != nil {
-		return Handshake{}, err
+		return Handshake{}, conn, err
 	}
-
-	defer conn.Close()
 
 	handshakeReq := Handshake{
 		InfoHash: metafile.InfoHash,
@@ -156,25 +154,25 @@ func makePeerHandshake(metafile TorrentMetaInfo, addr Addr) (Handshake, error) {
 
 	_, err = conn.Write(handshakeReq.toBytes())
 	if err != nil {
-		return Handshake{}, err
+		return Handshake{}, conn, err
 	}
 
 	resp := make([]byte, 68)
 	n, err := conn.Read(resp)
 	if err != nil {
-		return Handshake{}, err
+		return Handshake{}, conn, err
 	}
 
 	if n != 68 {
-		return Handshake{}, fmt.Errorf("unxepected handshake response length %d", n)
+		return Handshake{}, conn, fmt.Errorf("unxepected handshake response length %d", n)
 	}
 
 	respHandshake, err := NewHandshakeFromBytes(resp)
 	if err != nil {
-		return Handshake{}, err
+		return Handshake{}, conn, err
 	}
 
-	return respHandshake, nil
+	return respHandshake, conn, nil
 }
 
 type Handshake struct {
@@ -204,4 +202,75 @@ func NewHandshakeFromBytes(bytes []byte) (Handshake, error) {
 	h.PeerId = hex.EncodeToString(bytes[48:])
 
 	return h, nil
+}
+
+func downloadPiece(metafile TorrentMetaInfo, pieceIndex int, outputFile string) error {
+
+	peers, err := getPeers(metafile)
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	peer := peers.Peers[1]
+
+	_, peerConn, err := makePeerHandshake(metafile, peer)
+	if err != nil {
+		return err
+	}
+
+	defer peerConn.Close()
+
+	// read bitfield
+	msg, err := readPeerMessage(peerConn)
+	if err != nil {
+		return err
+	}
+
+	if msg.MsgId == 5 {
+		fmt.Println("bitfield")
+	}
+
+	return nil
+}
+
+type PeerMsg struct {
+	MsgId   int
+	Payload []byte
+}
+
+func readPeerMessage(conn net.Conn) (PeerMsg, error) {
+	msgLengthBuff, err := readBytesFromConnection(conn, 4)
+	if err != nil {
+		return PeerMsg{}, err
+	}
+
+	msgLength := int(binary.BigEndian.Uint32(msgLengthBuff))
+
+	msgIdBuff, err := readBytesFromConnection(conn, 1)
+	if err != nil {
+		return PeerMsg{}, err
+	}
+
+	payloadBuff, err := readBytesFromConnection(conn, msgLength)
+	if err != nil {
+		return PeerMsg{}, err
+	}
+
+	msg := PeerMsg{
+		MsgId:   int(binary.BigEndian.Uint32(msgIdBuff)),
+		Payload: payloadBuff,
+	}
+
+	return msg, nil
+}
+
+func readBytesFromConnection(conn net.Conn, n int) ([]byte, error) {
+	buff := make([]byte, n)
+	_, err := conn.Read(buff)
+	if err != nil {
+		return nil, err
+	}
+
+	return buff, nil
 }

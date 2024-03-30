@@ -84,29 +84,29 @@ func unmarshalToStruct(obj any, targetStruct any) error {
 	return nil
 }
 
-func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
+func decodeMetaInfoFile(path string) (TorrentMetaInfo, error) {
 	fileData, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return TorrentMetaInfo{}, err
 	}
 
 	reader := bufio.NewReader(bytes.NewReader(fileData))
 	decodedData, err := decodeBencode(reader)
 	if err != nil {
-		return nil, err
+		return TorrentMetaInfo{}, err
 	}
 
 	torrentFile := TorrentMetaInfo{}
 	err = unmarshalToStruct(decodedData, &torrentFile)
 	if err != nil {
-		return nil, err
+		return torrentFile, err
 	}
 
 	dataAsMap := decodedData.(map[string]any)
 
 	encodedInfo, err := encodeBencode(dataAsMap["info"])
 	if err != nil {
-		return nil, err
+		return torrentFile, err
 	}
 
 	info := dataAsMap["info"].(map[string]any)
@@ -119,5 +119,5 @@ func decodeMetaInfoFile(path string) (*TorrentMetaInfo, error) {
 		torrentFile.Info.Files = []TorrentFileInfoFile{file}
 	}
 
-	return &torrentFile, nil
+	return torrentFile, nil
 }

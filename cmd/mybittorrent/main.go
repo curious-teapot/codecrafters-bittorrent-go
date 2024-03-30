@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -83,12 +84,27 @@ func main() {
 			return
 		}
 
-		handshake, err := makePeerHandshake(*metaInfo, addr)
+		handshake, peerConn, err := makePeerHandshake(metaInfo, addr)
 		if err != nil {
 			fmt.Println(err)
 		}
 
+		defer peerConn.Close()
+
 		fmt.Printf("Peer ID: %s\n", handshake.PeerId)
+
+	case "download_piece":
+		outputFile := os.Args[3]
+		filePath := os.Args[4]
+		pieceIndex, _ := strconv.Atoi(os.Args[5])
+
+		metaInfo, err := decodeMetaInfoFile(filePath)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		downloadPiece(metaInfo, pieceIndex, outputFile)
 
 	default:
 		fmt.Println("Unknown command: " + command)
