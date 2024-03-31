@@ -86,6 +86,13 @@ func (p *Peer) SendIntrested() error {
 	return p.WriteMessage(PeerMsg{MsgId: int(MsgIdInterested)})
 }
 
+func (p *Peer) CalculatePieceLength(fileLength int, pieceLength int, pieceIndex int) int {
+	pieceOffset := pieceIndex * pieceLength
+	left := fileLength - pieceOffset
+
+	return min(left, pieceLength)
+}
+
 func (p *Peer) SendPieceBlocksRequests(pieceIndex int, pieceLength int) (int, error) {
 	blockSize := 16 * 1024
 	blocksRequested := 0

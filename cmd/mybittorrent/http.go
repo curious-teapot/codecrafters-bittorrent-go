@@ -216,7 +216,8 @@ func downloadPiece(metafile TorrentMetaInfo, pieceIndex int) ([]PieceBlock, erro
 		return nil, fmt.Errorf("undexpected message id %d", msg.MsgId)
 	}
 
-	blocksRequested, err := peer.SendPieceBlocksRequests(pieceIndex, metafile.Info.PieceLength)
+	pieceLength := peer.CalculatePieceLength(metafile.Info.Length, metafile.Info.PieceLength, pieceIndex)
+	blocksRequested, err := peer.SendPieceBlocksRequests(pieceIndex, pieceLength)
 	if err != nil {
 		return nil, err
 	}
