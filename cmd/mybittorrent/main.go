@@ -104,7 +104,23 @@ func main() {
 			return
 		}
 
-		downloadPiece(metaInfo, pieceIndex, outputFile)
+		pieceBlocks, err := downloadPiece(metaInfo, pieceIndex)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = savePieceToFile(pieceBlocks, outputFile)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = checkFileHash(outputFile, metaInfo.Info.Pieces[pieceIndex])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
 	default:
 		fmt.Println("Unknown command: " + command)

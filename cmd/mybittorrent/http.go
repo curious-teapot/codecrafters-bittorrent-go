@@ -204,19 +204,19 @@ func NewHandshakeFromBytes(bytes []byte) (Handshake, error) {
 	return h, nil
 }
 
-func downloadPiece(metafile TorrentMetaInfo, pieceIndex int, outputFile string) error {
+func downloadPiece(metafile TorrentMetaInfo, pieceIndex int) ([]PieceBlock, error) {
 
 	peers, err := getPeers(metafile)
 	if err != nil {
-		fmt.Println(err)
-		return nil
+		return nil, err
 	}
 
-	peer := peers.Peers[1]
+	peer := peers.Peers[0]
 
+	fmt.Println("send Handshake")
 	_, peerConn, err := makePeerHandshake(metafile, peer)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	defer peerConn.Close()
@@ -224,19 +224,97 @@ func downloadPiece(metafile TorrentMetaInfo, pieceIndex int, outputFile string) 
 	// read bitfield
 	msg, err := readPeerMessage(peerConn)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if msg.MsgId == 5 {
-		fmt.Println("bitfield")
+		fmt.Println("bitfield received")
+	} else {
+		fmt.Printf("undexpected message id %d", msg.MsgId)
 	}
 
-	return nil
+	fmt.Println("send interested msg")
+	err = writePeerMessage(peerConn, PeerMsg{MsgId: 2})
+	if err != nil {
+		return nil, err
+	}
+
+	msg, err = readPeerMessage(peerConn)
+	if err != nil {
+		return nil, err
+	}
+
+	if msg.MsgId == 1 {
+		fmt.Println("unchoke received")
+	} else {
+		fmt.Printf("undexpected message id %d", msg.MsgId)
+	}
+
+	blockSize := 16 * 1024
+	blockIndex := 0
+	for bytesToRequest := metafile.Info.PieceLength; bytesToRequest > 0; bytesToRequest -= blockSize {
+
+		msgPayload := make([]byte, 4*3)
+		binary.BigEndian.PutUint32(msgPayload, uint32(pieceIndex))                         // piece index
+		binary.BigEndian.PutUint32(msgPayload[4:], uint32(blockSize*blockIndex))           // block offset
+		binary.BigEndian.PutUint32(msgPayload[8:], uint32(min(blockSize, bytesToRequest))) // block length
+		blockIndex += 1
+
+		msg := PeerMsg{MsgId: 6, Payload: msgPayload}
+		fmt.Printf("send request msg %d \n", blockIndex)
+
+		err = writePeerMessage(peerConn, msg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	pieceBlocks := make([]PieceBlock, 0)
+
+	for i := 0; i < blockIndex; i++ {
+		msg, err = readPeerMessage(peerConn)
+		if err != nil {
+			return nil, err
+		}
+
+		if msg.MsgId == 7 {
+			fmt.Println("piece received")
+			block, err := msg.PieceBlock()
+			if err != nil {
+				return nil, err
+			}
+
+			pieceBlocks = append(pieceBlocks, block)
+		} else {
+			fmt.Printf("undexpected message id %d", msg.MsgId)
+		}
+	}
+
+	return pieceBlocks, nil
 }
 
 type PeerMsg struct {
 	MsgId   int
 	Payload []byte
+}
+
+type PieceBlock struct {
+	Index int
+	Begin int
+	Block []byte
+}
+
+func (msg PeerMsg) PieceBlock() (PieceBlock, error) {
+	block := PieceBlock{}
+	if msg.MsgId != 7 {
+		return block, fmt.Errorf("wrong msg-id for piece block - %d", msg.MsgId)
+	}
+
+	block.Index = int(binary.BigEndian.Uint32(msg.Payload[:4]))
+	block.Begin = int(binary.BigEndian.Uint32(msg.Payload[4:8]))
+	block.Block = msg.Payload[8:]
+
+	return block, nil
 }
 
 func readPeerMessage(conn net.Conn) (PeerMsg, error) {
@@ -252,25 +330,56 @@ func readPeerMessage(conn net.Conn) (PeerMsg, error) {
 		return PeerMsg{}, err
 	}
 
-	payloadBuff, err := readBytesFromConnection(conn, msgLength)
-	if err != nil {
-		return PeerMsg{}, err
+	payloadBuff := make([]byte, 0)
+	if msgLength > 1 {
+		payloadBuff, err = readBytesFromConnection(conn, msgLength-1)
+		if err != nil {
+			return PeerMsg{}, err
+		}
 	}
 
 	msg := PeerMsg{
-		MsgId:   int(binary.BigEndian.Uint32(msgIdBuff)),
+		MsgId:   int(msgIdBuff[0]),
 		Payload: payloadBuff,
 	}
 
 	return msg, nil
 }
 
-func readBytesFromConnection(conn net.Conn, n int) ([]byte, error) {
-	buff := make([]byte, n)
-	_, err := conn.Read(buff)
-	if err != nil {
-		return nil, err
+func writePeerMessage(conn net.Conn, msc PeerMsg) error {
+	msgLen := len(msc.Payload) + 1
+	buf := make([]byte, 5)
+
+	binary.BigEndian.PutUint32(buf, uint32(msgLen))
+	buf[4] = byte(msc.MsgId)
+
+	if msgLen > 1 {
+		buf = append(buf, msc.Payload...)
 	}
 
-	return buff, nil
+	_, err := conn.Write(buf)
+
+	return err
+}
+
+func readBytesFromConnection(conn net.Conn, n int) ([]byte, error) {
+	result := make([]byte, 0)
+	needToRead := n
+	for {
+		buff := make([]byte, needToRead)
+		readed, err := conn.Read(buff)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, buff[:readed]...)
+
+		if readed < needToRead {
+			needToRead -= readed
+		} else {
+			break
+		}
+	}
+
+	return result, nil
 }
