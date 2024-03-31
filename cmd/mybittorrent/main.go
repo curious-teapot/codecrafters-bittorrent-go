@@ -84,14 +84,21 @@ func main() {
 			return
 		}
 
-		handshake, peerConn, err := makePeerHandshake(metaInfo, addr)
+		peer := Peer{Addr: addr}
+		err = peer.Connect()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		err = peer.SendHandshake(metaInfo.InfoHash, "00112233445566778899")
 		if err != nil {
 			fmt.Println(err)
 		}
 
-		defer peerConn.Close()
+		defer peer.Disconnect()
 
-		fmt.Printf("Peer ID: %s\n", handshake.PeerId)
+		fmt.Printf("Peer ID: %s\n", peer.PeerId)
 
 	case "download_piece":
 		outputFile := os.Args[3]
