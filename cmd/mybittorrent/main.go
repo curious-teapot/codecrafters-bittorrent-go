@@ -129,6 +129,7 @@ func main() {
 			return
 		}
 
+		fmt.Printf("Piece %d downloaded to %s.\n", pieceIndex, filePath)
 	default:
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
