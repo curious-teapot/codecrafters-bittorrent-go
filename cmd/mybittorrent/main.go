@@ -150,6 +150,8 @@ func main() {
 			return
 		}
 
+		piece.Index = 0
+
 		err = savePieceToFile(piece, outputFile, metaInfo.Info.PieceLength)
 		if err != nil {
 			fmt.Println(err)
