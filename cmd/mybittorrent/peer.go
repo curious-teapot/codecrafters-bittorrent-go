@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/sha1"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"net"
+	"sort"
 )
 
 type peerMsgId int
@@ -35,6 +38,31 @@ type PieceBlock struct {
 	Index int
 	Begin int
 	Block []byte
+}
+
+type Piece struct {
+	Blocks []PieceBlock
+	Hash   Hash
+	Index  int
+}
+
+func (p *Piece) sortBlocks() {
+	sort.Slice(p.Blocks[:], func(i, j int) bool {
+		return p.Blocks[i].Begin < p.Blocks[j].Begin
+	})
+}
+
+func (p *Piece) checkHash() (bool, error) {
+	hasher := sha1.New()
+
+	for _, b := range p.Blocks {
+		_, err := hasher.Write(b.Block)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return hex.EncodeToString(hasher.Sum(nil)) == p.Hash.Hex(), nil
 }
 
 func (p *Peer) Connect() error {
@@ -197,4 +225,33 @@ func (msg PeerMsg) PieceBlock() (PieceBlock, error) {
 	block.Block = msg.Payload[8:]
 
 	return block, nil
+}
+
+type Handshake struct {
+	InfoHash Hash
+	PeerId   string
+}
+
+func (h *Handshake) toBytes() []byte {
+	buf := make([]byte, 1)
+	buf[0] = 19 // length of the protocol
+	buf = append(buf, []byte("BitTorrent protocol")...)
+	buf = append(buf, make([]byte, 8)...) // eight reserved bytes
+	buf = append(buf, h.InfoHash.Hash...)
+	buf = append(buf, []byte(h.PeerId)...) // peer id
+
+	return buf
+}
+
+func NewHandshakeFromBytes(bytes []byte) (Handshake, error) {
+	h := Handshake{}
+
+	if len(bytes) != 68 {
+		return h, fmt.Errorf("unxepected handhake length %d", len(bytes))
+	}
+
+	h.InfoHash = Hash{Hash: bytes[28:48]}
+	h.PeerId = hex.EncodeToString(bytes[48:])
+
+	return h, nil
 }

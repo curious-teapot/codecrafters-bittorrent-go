@@ -1,48 +1,22 @@
 package main
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
-	"fmt"
-	"io"
 	"os"
-	"sort"
 )
 
-func savePieceToFile(blocks []PieceBlock, path string) error {
-
-	sort.Slice(blocks[:], func(i, j int) bool {
-		return blocks[i].Begin < blocks[j].Begin
-	})
-
-	f, err := os.Create(path)
+func savePieceToFile(piece Piece, path string, pieceLength int) error {
+	// If the file doesn't exist, create it
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 
 	defer f.Close()
 
-	for _, block := range blocks {
-		f.Write(block.Block)
-	}
+	for _, block := range piece.Blocks {
+		pieceOffset := piece.Index*pieceLength + block.Begin
 
-	return nil
-}
-
-func checkFileHash(path string, expectedHash Hash) error {
-	file, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	hasher := sha1.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return err
-	}
-
-	if hex.EncodeToString(hasher.Sum(nil)) != expectedHash.Hex() {
-		return fmt.Errorf("wrong file hash")
+		f.WriteAt(block.Block, int64(pieceOffset))
 	}
 
 	return nil

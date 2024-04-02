@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func main() {
@@ -52,13 +53,18 @@ func main() {
 			return
 		}
 
-		peers, err := getPeers(metaInfo)
+		t := Tracker{
+			AnnounceUrl: metaInfo.Announce,
+			PeerId:      "00112233445566778899",
+		}
+
+		peers, err := t.getPeers(metaInfo)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		for _, peer := range peers.Peers {
+		for _, peer := range peers {
 			fmt.Printf("%s:%d\n", peer.Ip, peer.Port)
 		}
 
@@ -111,25 +117,128 @@ func main() {
 			return
 		}
 
-		pieceBlocks, err := downloadPiece(metaInfo, pieceIndex)
+		t := Tracker{
+			AnnounceUrl: metaInfo.Announce,
+			PeerId:      "00112233445566778899",
+		}
+
+		peers, err := t.getPeers(metaInfo)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		err = savePieceToFile(pieceBlocks, outputFile)
+		peer := Peer{Addr: peers[0]}
+
+		piece := Piece{
+			Index: pieceIndex,
+			Hash:  metaInfo.Info.Pieces[pieceIndex],
+		}
+
+		d := Downloader{PeerId: "00112233445566778899"}
+
+		piece.Blocks, err = d.downloadPiece(peer, metaInfo, pieceIndex)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		err = checkFileHash(outputFile, metaInfo.Info.Pieces[pieceIndex])
+		piece.sortBlocks()
+
+		isValid, _ := piece.checkHash()
+		if !isValid {
+			fmt.Printf("Piece %d is invalid", piece.Index)
+			return
+		}
+
+		err = savePieceToFile(piece, outputFile, metaInfo.Info.PieceLength)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		fmt.Printf("Piece %d downloaded to %s.\n", pieceIndex, filePath)
+		fmt.Printf("Piece %d downloaded to %s.\n", pieceIndex, outputFile)
+
+	case "download":
+		outputFile := os.Args[3]
+		filePath := os.Args[4]
+
+		metaInfo, err := decodeMetaInfoFile(filePath)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		t := Tracker{
+			AnnounceUrl: metaInfo.Announce,
+			PeerId:      "00112233445566778899",
+		}
+
+		peers, err := t.getPeers(metaInfo)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		pieces := make([]Piece, len(metaInfo.Info.Pieces))
+		for pieceIndex := range pieces {
+			pieces[pieceIndex].Index = pieceIndex
+			pieces[pieceIndex].Hash = metaInfo.Info.Pieces[pieceIndex]
+		}
+
+		d := Downloader{PeerId: "00112233445566778899"}
+
+		piecesQueue := make(chan Piece, len(pieces))
+		fileSaveQueue := make(chan Piece, len(pieces))
+
+		for _, piece := range pieces {
+			piecesQueue <- piece
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(len(pieces))
+
+		for _, peerAddr := range peers {
+			go func(peer Peer, piecesQueue chan Piece, fileSaveQueue chan Piece) {
+				for pieceToDownload := range piecesQueue {
+					pieceToDownload.Blocks, err = d.downloadPiece(peer, metaInfo, pieceToDownload.Index)
+					if err != nil {
+						fmt.Println(err)
+						piecesQueue <- pieceToDownload
+						return
+					}
+
+					pieceToDownload.sortBlocks()
+
+					isValid, _ := pieceToDownload.checkHash()
+					if !isValid {
+						piecesQueue <- pieceToDownload
+						return
+					}
+
+					fileSaveQueue <- pieceToDownload
+
+					wg.Done()
+				}
+			}(Peer{Addr: peerAddr}, piecesQueue, fileSaveQueue)
+		}
+
+		go func() {
+			for pieceToSave := range fileSaveQueue {
+				err = savePieceToFile(pieceToSave, outputFile, metaInfo.Info.PieceLength)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+			}
+		}()
+
+		wg.Wait()
+
+		close(fileSaveQueue)
+
+		fmt.Printf("Downloaded %s to %s.\n", filePath, outputFile)
+
 	default:
 		fmt.Println("Unknown command: " + command)
 		os.Exit(1)
