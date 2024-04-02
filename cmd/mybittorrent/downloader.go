@@ -1,23 +1,81 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"sync"
+)
 
 type Downloader struct {
 	PeerId string
 }
 
-func (d *Downloader) download(metafile TorrentMetaInfo, path string) error {
-	// t := Tracker{
-	// 	AnnounceUrl: metafile.Announce,
-	// 	PeerId:      "00112233445566778899",
-	// }
+func (d *Downloader) Download(metafile TorrentMetaInfo, path string) error {
 
-	// peers, err := t.getPeers(metafile)
-	// if err != nil {
-	// 	return err
-	// }
+	t := Tracker{
+		AnnounceUrl: metafile.Announce,
+		PeerId:      d.PeerId,
+	}
 
-	// // peer := Peer{Addr: peers[0]}
+	peers, err := t.getPeers(metafile)
+	if err != nil {
+		return err
+	}
+
+	pieces := make([]Piece, len(metafile.Info.Pieces))
+	for pieceIndex := range pieces {
+		pieces[pieceIndex].Index = pieceIndex
+		pieces[pieceIndex].Hash = metafile.Info.Pieces[pieceIndex]
+	}
+
+	piecesQueue := make(chan Piece, len(pieces))
+	fileSaveQueue := make(chan Piece, len(pieces))
+
+	for _, piece := range pieces {
+		piecesQueue <- piece
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(pieces))
+
+	for _, peerAddr := range peers {
+		go func(peer Peer, piecesQueue chan Piece, fileSaveQueue chan Piece) {
+			for pieceToDownload := range piecesQueue {
+				pieceToDownload.Blocks, err = d.downloadPiece(peer, metafile, pieceToDownload.Index)
+				if err != nil {
+					fmt.Println(err)
+					piecesQueue <- pieceToDownload
+					return
+				}
+
+				pieceToDownload.sortBlocks()
+
+				isValid, _ := pieceToDownload.checkHash()
+				if !isValid {
+					piecesQueue <- pieceToDownload
+					return
+				}
+
+				fileSaveQueue <- pieceToDownload
+
+				wg.Done()
+			}
+		}(Peer{Addr: peerAddr}, piecesQueue, fileSaveQueue)
+	}
+
+	go func() {
+		for pieceToSave := range fileSaveQueue {
+			err = savePieceToFile(pieceToSave, path, metafile.Info.PieceLength)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
+
+	close(fileSaveQueue)
 
 	return nil
 }
@@ -68,4 +126,22 @@ func (d *Downloader) downloadPiece(peer Peer, metafile TorrentMetaInfo, pieceInd
 	}
 
 	return peer.ReceivePieceBlocks(blocksRequested)
+}
+
+func savePieceToFile(piece Piece, path string, pieceLength int) error {
+	// If the file doesn't exist, create it
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	for _, block := range piece.Blocks {
+		pieceOffset := piece.Index*pieceLength + block.Begin
+
+		f.WriteAt(block.Block, int64(pieceOffset))
+	}
+
+	return nil
 }

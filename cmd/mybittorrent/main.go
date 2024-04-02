@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 func main() {
@@ -169,73 +168,13 @@ func main() {
 			return
 		}
 
-		t := Tracker{
-			AnnounceUrl: metaInfo.Announce,
-			PeerId:      "00112233445566778899",
-		}
+		d := Downloader{PeerId: "00112233445566778899"}
 
-		peers, err := t.getPeers(metaInfo)
+		err = d.Download(metaInfo, outputFile)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-
-		pieces := make([]Piece, len(metaInfo.Info.Pieces))
-		for pieceIndex := range pieces {
-			pieces[pieceIndex].Index = pieceIndex
-			pieces[pieceIndex].Hash = metaInfo.Info.Pieces[pieceIndex]
-		}
-
-		d := Downloader{PeerId: "00112233445566778899"}
-
-		piecesQueue := make(chan Piece, len(pieces))
-		fileSaveQueue := make(chan Piece, len(pieces))
-
-		for _, piece := range pieces {
-			piecesQueue <- piece
-		}
-
-		var wg sync.WaitGroup
-		wg.Add(len(pieces))
-
-		for _, peerAddr := range peers {
-			go func(peer Peer, piecesQueue chan Piece, fileSaveQueue chan Piece) {
-				for pieceToDownload := range piecesQueue {
-					pieceToDownload.Blocks, err = d.downloadPiece(peer, metaInfo, pieceToDownload.Index)
-					if err != nil {
-						fmt.Println(err)
-						piecesQueue <- pieceToDownload
-						return
-					}
-
-					pieceToDownload.sortBlocks()
-
-					isValid, _ := pieceToDownload.checkHash()
-					if !isValid {
-						piecesQueue <- pieceToDownload
-						return
-					}
-
-					fileSaveQueue <- pieceToDownload
-
-					wg.Done()
-				}
-			}(Peer{Addr: peerAddr}, piecesQueue, fileSaveQueue)
-		}
-
-		go func() {
-			for pieceToSave := range fileSaveQueue {
-				err = savePieceToFile(pieceToSave, outputFile, metaInfo.Info.PieceLength)
-				if err != nil {
-					fmt.Println(err)
-					return
-				}
-			}
-		}()
-
-		wg.Wait()
-
-		close(fileSaveQueue)
 
 		fmt.Printf("Downloaded %s to %s.\n", filePath, outputFile)
 
