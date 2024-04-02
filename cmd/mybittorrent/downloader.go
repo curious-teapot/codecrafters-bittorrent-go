@@ -58,6 +58,8 @@ func (d *Downloader) Download(metafile TorrentMetaInfo, path string) error {
 
 				fileSaveQueue <- pieceToDownload
 
+				fmt.Printf("Piece downloaded %d \n", pieceToDownload.Index)
+
 				wg.Done()
 			}
 		}(Peer{Addr: peerAddr}, piecesQueue, fileSaveQueue)
@@ -66,6 +68,7 @@ func (d *Downloader) Download(metafile TorrentMetaInfo, path string) error {
 	go func() {
 		for pieceToSave := range fileSaveQueue {
 			err = savePieceToFile(pieceToSave, path, metafile.Info.PieceLength)
+			fmt.Printf("Piece saved %d \n", pieceToSave.Index)
 			if err != nil {
 				fmt.Println(err)
 				return
