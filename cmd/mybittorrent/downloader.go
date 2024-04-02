@@ -65,6 +65,8 @@ func (d *Downloader) Download(metafile TorrentMetaInfo, path string) error {
 		}(Peer{Addr: peerAddr}, piecesQueue, fileSaveQueue)
 	}
 
+	fileSaveIsDone := make(chan struct{})
+
 	go func() {
 		for pieceToSave := range fileSaveQueue {
 			err = savePieceToFile(pieceToSave, path, metafile.Info.PieceLength)
@@ -74,11 +76,12 @@ func (d *Downloader) Download(metafile TorrentMetaInfo, path string) error {
 				return
 			}
 		}
+		close(fileSaveIsDone)
 	}()
 
 	wg.Wait()
-
 	close(fileSaveQueue)
+	<-fileSaveIsDone
 
 	return nil
 }
