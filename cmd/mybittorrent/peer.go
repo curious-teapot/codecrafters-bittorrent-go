@@ -76,6 +76,10 @@ func (p *Peer) Connect() error {
 	return nil
 }
 
+func (p *Peer) isConnected() bool {
+	return p.Conn != nil
+}
+
 func (p *Peer) Disconnect() error {
 	if p.Conn != nil {
 		return p.Conn.Close()
@@ -95,7 +99,7 @@ func (p *Peer) SendHandshake(infoHash Hash, peerId string) error {
 		return err
 	}
 
-	resp, err := readBytesFromConnection(p.Conn, 68)
+	resp, err := readBytes(p.Conn, 68)
 	if err != nil {
 		return err
 	}
@@ -169,21 +173,21 @@ func (p *Peer) ReceivePieceBlocks(blocksExpected int) ([]PieceBlock, error) {
 }
 
 func (p *Peer) ReadMessage() (PeerMsg, error) {
-	msgLengthBuff, err := readBytesFromConnection(p.Conn, 4)
+	msgLengthBuff, err := readBytes(p.Conn, 4)
 	if err != nil {
 		return PeerMsg{}, err
 	}
 
 	msgLength := int(binary.BigEndian.Uint32(msgLengthBuff))
 
-	msgIdBuff, err := readBytesFromConnection(p.Conn, 1)
+	msgIdBuff, err := readBytes(p.Conn, 1)
 	if err != nil {
 		return PeerMsg{}, err
 	}
 
 	payloadBuff := make([]byte, 0)
 	if msgLength > 1 {
-		payloadBuff, err = readBytesFromConnection(p.Conn, msgLength-1)
+		payloadBuff, err = readBytes(p.Conn, msgLength-1)
 		if err != nil {
 			return PeerMsg{}, err
 		}

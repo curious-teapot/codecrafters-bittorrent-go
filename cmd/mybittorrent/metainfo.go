@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -85,12 +84,12 @@ func unmarshalToStruct(obj any, targetStruct any) error {
 }
 
 func decodeMetaInfoFile(path string) (TorrentMetaInfo, error) {
-	fileData, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return TorrentMetaInfo{}, err
 	}
 
-	reader := bufio.NewReader(bytes.NewReader(fileData))
+	reader := bufio.NewReader(f)
 	decodedData, err := decodeBencode(reader)
 	if err != nil {
 		return TorrentMetaInfo{}, err

@@ -17,22 +17,7 @@ func readUntilByte(reader *bufio.Reader, untilByte byte) (string, error) {
 	return string(buff[:len(buff)-1]), nil
 }
 
-func readByteSlice(reader *bufio.Reader, n int) ([]byte, error) {
-	bytes, err := reader.Peek(n)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = reader.Discard(n)
-	if err != nil {
-		return nil, err
-	}
-
-	return bytes, nil
-}
-
 func decodeString(reader *bufio.Reader) (string, error) {
-
 	sizeStr, err := readUntilByte(reader, ':')
 	if err != nil {
 		return "", err
@@ -43,7 +28,7 @@ func decodeString(reader *bufio.Reader) (string, error) {
 		return "", err
 	}
 
-	bytes, err := readByteSlice(reader, length)
+	bytes, err := readBytes(reader, length)
 	if err != nil {
 		return "", err
 	}

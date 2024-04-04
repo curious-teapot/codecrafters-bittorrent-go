@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -54,12 +55,12 @@ func (a *Addr) ToString() string {
 	return fmt.Sprintf("%s:%d", a.Ip, a.Port)
 }
 
-func readBytesFromConnection(conn net.Conn, n int) ([]byte, error) {
+func readBytes(r io.Reader, n int) ([]byte, error) {
 	result := make([]byte, 0)
 	needToRead := n
 	for {
 		buff := make([]byte, needToRead)
-		readed, err := conn.Read(buff)
+		readed, err := r.Read(buff)
 		if err != nil {
 			return nil, err
 		}

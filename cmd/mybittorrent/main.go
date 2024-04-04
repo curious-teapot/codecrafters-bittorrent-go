@@ -64,7 +64,7 @@ func main() {
 		}
 
 		for _, peer := range peers {
-			fmt.Printf("%s:%d\n", peer.Ip, peer.Port)
+			fmt.Printf("%s:%d\n", peer.Addr.Ip, peer.Addr.Port)
 		}
 
 	case "handshake":
@@ -127,7 +127,7 @@ func main() {
 			return
 		}
 
-		peer := Peer{Addr: peers[0]}
+		peer := peers[0]
 
 		piece := Piece{
 			Index: pieceIndex,
