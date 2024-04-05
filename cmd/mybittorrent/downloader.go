@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"sync"
 )
@@ -109,7 +110,7 @@ func (d *Downloader) downloadPiece(peer Peer, metafile TorrentMetaInfo, pieceInd
 
 	pieceBlocks := make([]PieceBlock, 0)
 
-	bloksTotal := metafile.Info.PieceLength / (16 * 1024)
+	bloksTotal := math.Ceil(float64(metafile.Info.PieceLength) / (16 * 1024))
 
 	for {
 		msg, err := peer.ReadMessage()
