@@ -110,7 +110,7 @@ func (d *Downloader) downloadPiece(peer Peer, metafile TorrentMetaInfo, pieceInd
 
 	pieceBlocks := make([]PieceBlock, 0)
 
-	bloksTotal := math.Ceil(float64(metafile.Info.PieceLength) / (16 * 1024))
+	bloksTotal := calculateBlocksCount(metafile.Info.PieceLength)
 
 	for {
 		msg, err := peer.ReadMessage()
@@ -148,6 +148,11 @@ func (d *Downloader) downloadPiece(peer Peer, metafile TorrentMetaInfo, pieceInd
 	}
 
 	return pieceBlocks, nil
+}
+
+func calculateBlocksCount(pieceLength int) int {
+	blockSize := 16 * 1024
+	return int(math.Ceil(float64(pieceLength) / float64(blockSize)))
 }
 
 func savePieceToFile(piece Piece, path string, pieceLength int) error {
