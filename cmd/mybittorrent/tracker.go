@@ -61,7 +61,10 @@ func (t *Tracker) getPeersHttp(metafile TorrentMetaInfo) ([]Peer, error) {
 
 	peers := make([]Peer, len(responseStruct.Peers))
 	for i, peerAddr := range responseStruct.Peers {
-		peers[i] = Peer{Addr: peerAddr}
+		peers[i] = Peer{
+			Addr:       peerAddr,
+			HavePieces: NewPiecesMap(len(metafile.Info.Pieces)),
+		}
 	}
 
 	return peers, nil
@@ -224,7 +227,12 @@ func (t *Tracker) getPeersUdp(metafile TorrentMetaInfo) ([]Peer, error) {
 
 		peerData = peerData[6:]
 
-		peers = append(peers, Peer{Addr: addr})
+		peer := Peer{
+			Addr:       addr,
+			HavePieces: NewPiecesMap(len(metafile.Info.Pieces)),
+		}
+
+		peers = append(peers, peer)
 		if len(peerData) == 0 {
 			break
 		}

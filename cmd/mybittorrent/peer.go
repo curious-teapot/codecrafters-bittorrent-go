@@ -24,9 +24,10 @@ const (
 )
 
 type Peer struct {
-	Addr   Addr
-	Conn   net.Conn
-	PeerId string
+	Addr       Addr
+	Conn       net.Conn
+	PeerId     string
+	HavePieces PiecesMap
 }
 
 type PeerMsg struct {
@@ -44,6 +45,45 @@ type Piece struct {
 	Blocks []PieceBlock
 	Hash   Hash
 	Index  int
+}
+
+type PiecesMap struct {
+	PiecesStatus []bool
+}
+
+func (pm *PiecesMap) setPieceStatus(pieceIndex int, have bool) {
+	if pieceIndex >= len(pm.PiecesStatus) {
+		return
+	}
+
+	pm.PiecesStatus[pieceIndex] = have
+}
+
+func (pm *PiecesMap) updateFromBitfield(bitfield []byte) {
+	for byteIndex, bitfieldByte := range bitfield {
+		for i := 0; i < 8; i++ {
+			bitIndex := byteIndex*8 + i
+			if byteIndex == len(pm.PiecesStatus) {
+				return
+			}
+			havePiece := 1 == bitfieldByte>>uint(7-i)&1
+			pm.setPieceStatus(bitIndex, havePiece)
+		}
+	}
+}
+
+func NewPiecesMap(size int) PiecesMap {
+	bits := make([]bool, size)
+
+	return PiecesMap{PiecesStatus: bits}
+}
+
+func (bm PiecesMap) hasPiece(i int) bool {
+	if i >= len(bm.PiecesStatus) || i < 0 {
+		return false
+	}
+
+	return bm.PiecesStatus[i]
 }
 
 func (p *Piece) sortBlocks() {

@@ -127,7 +127,7 @@ func main() {
 			return
 		}
 
-		peer := peers[0]
+		peer := peers[1]
 
 		piece := Piece{
 			Index: pieceIndex,
@@ -136,7 +136,7 @@ func main() {
 
 		d := Downloader{PeerId: "00112233445566778899"}
 
-		piece.Blocks, err = d.downloadPiece(peer, metaInfo, pieceIndex)
+		piece.Blocks, err = d.downloadPiece(&peer, metaInfo, pieceIndex)
 		if err != nil {
 			fmt.Println(err)
 			return

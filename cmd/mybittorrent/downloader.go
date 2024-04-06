@@ -47,7 +47,7 @@ func (d *Downloader) Download(metafile TorrentMetaInfo, path string) error {
 		peer := peer
 		go func() {
 			for pieceToDownload := range piecesQueue {
-				pieceToDownload.Blocks, err = d.downloadPiece(peer, metafile, pieceToDownload.Index)
+				pieceToDownload.Blocks, err = d.downloadPiece(&peer, metafile, pieceToDownload.Index)
 				if err != nil {
 					fmt.Println(err)
 					piecesQueue <- pieceToDownload
@@ -92,57 +92,65 @@ func (d *Downloader) Download(metafile TorrentMetaInfo, path string) error {
 	return nil
 }
 
-func (d *Downloader) downloadPiece(peer Peer, metafile TorrentMetaInfo, pieceIndex int) ([]PieceBlock, error) {
-
+func (d *Downloader) downloadPiece(peer *Peer, metafile TorrentMetaInfo, pieceIndex int) ([]PieceBlock, error) {
 	err := peer.Connect()
 	if err != nil {
-		return nil, err
-	}
-
-	err = peer.SendHandshake(metafile.InfoHash, d.PeerId)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("connection error: %s", err)
 	}
 
 	defer peer.Disconnect()
 
-	// var bitfield []byte = nil
+	err = peer.SendHandshake(metafile.InfoHash, d.PeerId)
+	if err != nil {
+		return nil, fmt.Errorf("handshake error: %s", err)
+	}
+
+	pieceLength := peer.CalculatePieceLength(metafile.Info.Length, metafile.Info.PieceLength, pieceIndex)
+	pieceBloksCount := calculateBlocksCount(pieceLength)
 
 	pieceBlocks := make([]PieceBlock, 0)
-
-	bloksTotal := calculateBlocksCount(metafile.Info.PieceLength)
 
 	for {
 		msg, err := peer.ReadMessage()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("read message error: %s", err)
 		}
 
 		switch msg.MsgId {
 		case int(MsgIdBitfield):
+			peer.HavePieces.updateFromBitfield(msg.Payload)
+			if !peer.HavePieces.hasPiece(pieceIndex) {
+				return nil, fmt.Errorf("peer dont have piece #%d", pieceIndex)
+			}
+
 			err = peer.SendIntrested()
 			if err != nil {
 				return nil, err
 			}
-		case int(MsgIdUnchoke):
 
-			pieceLength := peer.CalculatePieceLength(metafile.Info.Length, metafile.Info.PieceLength, pieceIndex)
+		case int(MsgIdHave):
+			peerHavePieceIndex := int(msg.Payload[0])
+			peer.HavePieces.setPieceStatus(peerHavePieceIndex, true)
+
+		case int(MsgIdUnchoke):
 			_, err := peer.SendPieceBlocksRequests(pieceIndex, pieceLength)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("send piece blocks request error: %s", err)
 			}
+
 		case int(MsgIdPiece):
 			block, err := msg.PieceBlock()
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("piece block decode error: %s", err)
 			}
 
 			pieceBlocks = append(pieceBlocks, block)
+
 		default:
 			return nil, fmt.Errorf("undexpected message id %d", msg.MsgId)
 		}
 
-		if len(pieceBlocks) == bloksTotal {
+		if len(pieceBlocks) == pieceBloksCount {
 			break
 		}
 	}
