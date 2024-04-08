@@ -162,7 +162,7 @@ func (d *Downloader) downloadPiece(peer *Peer, metafile TorrentMetaInfo, pieceIn
 
 		switch msg.MsgId {
 		case int(MsgIdKeepAlive):
-			fmt.Println("Keep alive receiverd")
+			fmt.Println("Keep alive received")
 
 		case int(MsgIdChoke):
 			peer.Disconnect()
