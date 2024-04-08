@@ -90,10 +90,12 @@ func main() {
 		}
 
 		peer := Peer{Addr: addr}
-		err = peer.Connect()
+		conn, err := peer.Connect()
 		if err != nil {
 			fmt.Println(err)
 			return
+		} else {
+			peer.Conn = conn
 		}
 
 		err = peer.SendHandshake(metaInfo.InfoHash, "00112233445566778899")
@@ -127,8 +129,6 @@ func main() {
 			return
 		}
 
-		peer := peers[1]
-
 		piece := Piece{
 			Index: pieceIndex,
 			Hash:  metaInfo.Info.Pieces[pieceIndex],
@@ -136,10 +136,14 @@ func main() {
 
 		d := Downloader{PeerId: "00112233445566778899"}
 
-		piece.Blocks, err = d.downloadPiece(&peer, metaInfo, pieceIndex)
-		if err != nil {
-			fmt.Println(err)
-			return
+		for _, peer := range peers {
+			piece.Blocks, err = d.downloadPiece(&peer, metaInfo, pieceIndex)
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				peer.Conn.Close()
+				break
+			}
 		}
 
 		piece.sortBlocks()

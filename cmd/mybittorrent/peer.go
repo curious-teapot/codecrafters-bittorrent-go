@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"time"
 )
 
 type peerMsgId int
 
 const (
+	MsgIdKeepAlive     peerMsgId = -1
 	MsgIdChoke         peerMsgId = 0
 	MsgIdUnchoke       peerMsgId = 1
 	MsgIdInterested    peerMsgId = 2
@@ -66,7 +68,7 @@ func (pm *PiecesMap) updateFromBitfield(bitfield []byte) {
 			if byteIndex == len(pm.PiecesStatus) {
 				return
 			}
-			havePiece := 1 == bitfieldByte>>uint(7-i)&1
+			havePiece := bitfieldByte>>uint(7-i)&1 == 1
 			pm.setPieceStatus(bitIndex, havePiece)
 		}
 	}
@@ -105,15 +107,8 @@ func (p *Piece) checkHash() (bool, error) {
 	return hex.EncodeToString(hasher.Sum(nil)) == p.Hash.Hex(), nil
 }
 
-func (p *Peer) Connect() error {
-	conn, err := net.Dial("tcp", p.Addr.ToString())
-	if err != nil {
-		return err
-	}
-
-	p.Conn = conn
-
-	return nil
+func (p *Peer) Connect() (net.Conn, error) {
+	return net.DialTimeout("tcp4", p.Addr.ToString(), 5*time.Second)
 }
 
 func (p *Peer) isConnected() bool {
@@ -122,7 +117,9 @@ func (p *Peer) isConnected() bool {
 
 func (p *Peer) Disconnect() error {
 	if p.Conn != nil {
-		return p.Conn.Close()
+		err := p.Conn.Close()
+		p.Conn = nil
+		return err
 	}
 
 	return nil
@@ -219,6 +216,10 @@ func (p *Peer) ReadMessage() (PeerMsg, error) {
 	}
 
 	msgLength := int(binary.BigEndian.Uint32(msgLengthBuff))
+
+	if msgLength == 0 {
+		return PeerMsg{MsgId: int(MsgIdKeepAlive)}, nil
+	}
 
 	msgIdBuff, err := readBytes(p.Conn, 1)
 	if err != nil {

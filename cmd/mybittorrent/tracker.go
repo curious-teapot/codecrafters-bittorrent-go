@@ -177,6 +177,7 @@ func (t *Tracker) getPeersUdp(metafile TorrentMetaInfo) ([]Peer, error) {
 
 	buf = make([]byte, 100)
 
+	peersRequested := 100
 	binary.BigEndian.PutUint64(buf[0:8], connection_id)                  // int64_t 	connection_id 	The connection id acquired from establishing the connection.
 	binary.BigEndian.PutUint32(buf[8:12], 1)                             // int32_t 	action 	Action. in this case, 1 for announce. See actions.
 	binary.BigEndian.PutUint32(buf[12:16], uint32(transactionId))        // int32_t 	transaction_id 	Randomized by client.
@@ -188,7 +189,7 @@ func (t *Tracker) getPeersUdp(metafile TorrentMetaInfo) ([]Peer, error) {
 	binary.BigEndian.PutUint32(buf[80:84], 0)                            // int32_t 	event
 	binary.BigEndian.PutUint32(buf[84:88], 0)                            // uint32_t 	ip 	Your ip address. Set to 0 if you want the tracker to use the sender of this UDP packet.
 	binary.BigEndian.PutUint32(buf[88:92], uint32(transactionId))        // uint32_t 	key 	A unique key that is randomized by the client.
-	binary.BigEndian.PutUint32(buf[92:96], 10)                           // int32_t 	num_want 	The maximum number of peers you want in the reply. Use -1 for default.
+	binary.BigEndian.PutUint32(buf[92:96], uint32(peersRequested))       // int32_t 	num_want 	The maximum number of peers you want in the reply. Use -1 for default.
 	binary.BigEndian.PutUint16(buf[96:98], 9999)                         // uint16_t 	port 	The port you're listening on.
 	binary.BigEndian.PutUint16(buf[98:100], 0)                           // uint16_t 	extensions
 
@@ -198,7 +199,7 @@ func (t *Tracker) getPeersUdp(metafile TorrentMetaInfo) ([]Peer, error) {
 		return nil, err
 	}
 
-	buf = make([]byte, 100)
+	buf = make([]byte, 100+peersRequested*6)
 	readed, err := conn.Read(buf)
 	if err != nil {
 		return nil, err
